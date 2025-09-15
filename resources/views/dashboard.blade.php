@@ -11,8 +11,8 @@
                 <div class="bg-white shadow-md rounded-lg overflow-hidden">
 
                     <!-- Header: uses px-6 to align with table cells -->
-                    <div class="px-6 py-4 border-b">
-                        <h1 class="text-2xl font-bold">Giftcards</h1>
+                    <div class="px-6 py-6 border-b text-center">
+                        <h1 class="text-3xl sm:text-4xl font-extrabold">Giftcards</h1>
                     </div>
 
                     <!-- Table -->
