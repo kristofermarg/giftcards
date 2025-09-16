@@ -10,7 +10,9 @@ class GiftcardFactory extends Factory
 {
     public function definition(): array
     {
-        $amount = $this->faker->numberBetween(1000, 10000); 
+        $amount = random_int(1000, 10000);
+        $expiryMonths = random_int(3, 12);
+
         return [
             'public_id'      => (string) Str::uuid(),
             'code'           => GiftcardCode::make(),
@@ -18,10 +20,10 @@ class GiftcardFactory extends Factory
             'balance'        => $amount,
             'currency'       => 'ISK',
             'status'         => 'active',
-            'expires_at'     => now()->addMonths($this->faker->numberBetween(3,12)),
+            'expires_at'     => now()->addMonths($expiryMonths),
             'meta'           => [
-                'owner_name'  => $this->faker->name(),
-                'owner_email' => $this->faker->safeEmail(),
+                'owner_name'  => 'Giftcard Owner #' . random_int(1000, 9999),
+                'owner_email' => 'owner' . random_int(1000, 9999) . '@example.com',
             ],
         ];
     }
