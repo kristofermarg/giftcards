@@ -16,13 +16,13 @@
                             <thead class="bg-gray-100">
                                 <tr>
                                     <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Owner</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Code</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Balance</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Currency</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Expires</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Created</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Actions</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Code</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Balance</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Currency</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Expires</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Created</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Status</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-600 uppercase">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
@@ -56,7 +56,7 @@
                                         </td>
                                         <td class="px-6 py-4 text-center">
                                             <a href="{{ route('admin.giftcards.show', $gc) }}"
-                                               class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md shadow-sm transition bg-indigo-600 hover:bg-indigo-700">
+                                               class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-[25px] border border-indigo-600 text-indigo-600 bg-white shadow-sm transition hover:bg-indigo-50">
                                                 View Transactions
                                             </a>
                                         </td>

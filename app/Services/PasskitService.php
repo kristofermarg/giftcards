@@ -31,7 +31,7 @@ class PasskitService
     public function enrolMember(
         string $externalId,
         ?string $email = null,
-        int $pointsCents = 0,
+        ?int $pointsCents = null,
         array $customFields = [],
         array $extra = []
     ): array {
@@ -118,16 +118,27 @@ class PasskitService
         }
 
         if ($res->failed()) {
-            $msg = 'PassKit HTTP ' . $res->status();
+            $body = $res->json();
+            if (is_null($body)) {
+                $body = (string) $res->body();
+            }
+
             Log::error('PassKit error', [
                 'rid' => $rid,
                 'status' => $res->status(),
-                'body' => $res->json() ?? (string) $res->body(),
+                'body' => $body,
                 'url' => $url,
             ]);
+
+            $msg = 'PassKit HTTP ' . $res->status();
+            if (is_array($body)) {
+                $msg .= ': ' . json_encode($body);
+            } elseif (is_string($body) && $body !== '') {
+                $msg .= ': ' . $body;
+            }
+
             throw new \RuntimeException($msg);
         }
-
         return $res->json() ?? (string) $res->body();
     }
 

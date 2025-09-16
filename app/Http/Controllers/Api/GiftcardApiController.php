@@ -8,6 +8,7 @@ use App\Services\GiftcardCode;
 use App\Services\PasskitService;
 use App\Models\GiftcardTransaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -89,28 +90,44 @@ class GiftcardApiController extends Controller
         // Attempt PassKit enrolment (best-effort)
         $passkitResponse = null; // capture raw response to return to client
         try {
-            $ownerEmail = is_array($giftcard->meta ?? null) ? ($giftcard->meta['owner_email'] ?? null) : null;
-            $ownerName  = is_array($giftcard->meta ?? null) ? ($giftcard->meta['owner_name'] ?? null) : null;
+            $meta = Arr::wrap($giftcard->meta);
+            $ownerEmail = Arr::get($meta, 'owner_email');
+            $ownerName  = trim((string) Arr::get($meta, 'owner_name', ''));
+            $ownerPhone = Arr::get($meta, 'owner_phone');
 
             $person = [];
-            if ($ownerName) {
+            if ($ownerName !== '') {
                 $person['displayName'] = $ownerName;
+                $parts = preg_split('/\\s+/', $ownerName, -1, PREG_SPLIT_NO_EMPTY);
+                if (!empty($parts)) {
+                    $person['forename'] = array_shift($parts);
+                    if (!empty($parts)) {
+                        $person['surname'] = implode(' ', $parts);
+                    }
+                }
+            }
+            if (!empty($ownerPhone)) {
+                $person['mobileNumber'] = $ownerPhone;
             }
 
-            $extra = [
+            $metaData = array_filter([
+                'currency'       => $giftcard->currency,
+                'site'           => config('app.url'),
+                'orderId'        => isset($data['order_id']) ? (string) $data['order_id'] : null,
+                'orderReference' => $data['order_reference'] ?? null,
+            ], static fn ($value) => !is_null($value) && $value !== '');
+
+            $extra = array_filter([
                 'person'     => $person,
-                'metaData'   => [
-                    'currency' => $giftcard->currency,
-                    'site'     => config('app.url'),
-                ],
+                'metaData'   => $metaData,
                 'status'     => 'ENROLLED',
                 'expiryDate' => $giftcard->expires_at ? $giftcard->expires_at->toAtomString() : null,
-            ];
+            ], static fn ($value) => !is_null($value) && $value !== [] && $value !== '');
 
             $result = $passkit->enrolMember(
                 externalId: $giftcard->code,
                 email: $ownerEmail,
-                pointsCents: (int) $giftcard->initial_amount,
+                pointsCents: max(0, (int) round($initialMajor)),
                 customFields: [],
                 extra: $extra,
             );
