@@ -23,19 +23,21 @@ class GiftcardApiController extends Controller
         }
 
         $giftcards = $query->orderByDesc('created_at')->paginate($perPage);
+        $giftcards->getCollection()->transform(fn (Giftcard $gc) => $this->serializeGiftcard($gc));
+
         return response()->json($giftcards);
     }
 
     public function show(Giftcard $giftcard)
     {
-        return response()->json($giftcard);
+        return response()->json($this->serializeGiftcard($giftcard));
     }
 
     public function store(Request $request, PasskitService $passkit)
     {
         $data = $request->validate([
-            'initial_amount' => ['required','integer','min:0'],
-            'balance'        => ['nullable','integer','min:0'],
+            'initial_amount' => ['required','numeric','min:0'],
+            'balance'        => ['nullable','numeric','min:0'],
             'currency'       => ['nullable','string','size:3'],
             'status'         => ['nullable', Rule::in(['active','inactive','redeemed','expired'])],
             'expires_at'     => ['nullable','date'],
@@ -48,11 +50,17 @@ class GiftcardApiController extends Controller
             'order_meta'         => ['sometimes','nullable','array'],
         ]);
 
+        $initialMajor = (float) $data['initial_amount'];
+        $initialMinor = (int) round($initialMajor * 100);
+        $balanceMinor = array_key_exists('balance', $data)
+            ? (int) round(((float) $data['balance']) * 100)
+            : $initialMinor;
+
         $giftcard = new Giftcard();
         $giftcard->public_id = (string) Str::uuid();
         $giftcard->code = GiftcardCode::make();
-        $giftcard->initial_amount = $data['initial_amount'];
-        $giftcard->balance = $data['balance'] ?? $data['initial_amount'];
+        $giftcard->initial_amount = $initialMinor;
+        $giftcard->balance = max(0, $balanceMinor);
         $giftcard->currency = strtoupper($data['currency'] ?? 'ISK');
         $giftcard->status = $data['status'] ?? 'active';
         $giftcard->expires_at = $data['expires_at'] ?? null;
@@ -131,8 +139,10 @@ class GiftcardApiController extends Controller
             ];
         }
 
+        $giftcard->refresh();
+
         return response()->json([
-            'giftcard' => $giftcard,
+            'giftcard' => $this->serializeGiftcard($giftcard),
             'passkit' => $passkitResponse,
         ], 201);
     }
@@ -140,44 +150,56 @@ class GiftcardApiController extends Controller
     public function update(Request $request, Giftcard $giftcard)
     {
         $data = $request->validate([
-            'initial_amount' => ['sometimes','integer','min:0'],
-            'balance'        => ['sometimes','integer','min:0'],
-            'currency'       => ['sometimes','string','size:3'],
-            'status'         => ['sometimes', Rule::in(['active','inactive','redeemed','expired'])],
-            'expires_at'     => ['sometimes','nullable','date'],
-            'meta'           => ['sometimes','nullable','array'],
-            'passkit_program_id' => ['sometimes','nullable','string','max:64'],
-            'passkit_member_id'  => ['sometimes','nullable','string','max:64'],
+            'amount'    => ['required','numeric','min:0.01'],
+            'reference' => ['sometimes','nullable','string','max:128'],
         ]);
 
-        if (array_key_exists('initial_amount', $data)) {
-            $giftcard->initial_amount = $data['initial_amount'];
-        }
-        if (array_key_exists('balance', $data)) {
-            $giftcard->balance = $data['balance'];
-        }
-        if (array_key_exists('currency', $data)) {
-            $giftcard->currency = strtoupper($data['currency']);
-        }
-        if (array_key_exists('status', $data)) {
-            $giftcard->status = $data['status'];
-        }
-        if (array_key_exists('expires_at', $data)) {
-            $giftcard->expires_at = $data['expires_at'];
-        }
-        if (array_key_exists('meta', $data)) {
-            $giftcard->meta = $data['meta'];
-        }
-        if (array_key_exists('passkit_program_id', $data)) {
-            $giftcard->passkit_program_id = $data['passkit_program_id'];
-        }
-        if (array_key_exists('passkit_member_id', $data)) {
-            $giftcard->passkit_member_id = $data['passkit_member_id'];
+        $amount = (float) $data['amount'];
+        $amountMinor = (int) round($amount * 100);
+        $previousBalance = (int) $giftcard->balance;
+
+        if ($amountMinor <= 0) {
+            return response()->json([
+                'message' => 'Amount must be greater than zero.',
+                'errors' => [
+                    'amount' => ['The amount must convert to a positive value.'],
+                ],
+            ], 422);
         }
 
+        if ($amountMinor > $previousBalance) {
+            return response()->json([
+                'message' => 'Amount exceeds available balance.',
+                'errors' => [
+                    'amount' => ['The requested amount exceeds the giftcard balance.'],
+                ],
+            ], 422);
+        }
+
+        $giftcard->balance = $previousBalance - $amountMinor;
+        if ($giftcard->balance === 0) {
+            $giftcard->status = 'inactive';
+        }
         $giftcard->save();
 
-        return response()->json($giftcard);
+        GiftcardTransaction::create([
+            'giftcard_id' => $giftcard->id,
+            'type'        => 'debit',
+            'amount'      => $amountMinor,
+            'reference'   => $data['reference'] ?? null,
+            'details'     => [
+                'reason'          => 'api_debit',
+                'amount_major'    => $amount,
+                'amount_minor'    => $amountMinor,
+                'balance_before'  => $previousBalance,
+                'balance_after'   => $giftcard->balance,
+                'currency'        => $giftcard->currency,
+            ],
+        ]);
+
+        $giftcard->refresh();
+
+        return response()->json($this->serializeGiftcard($giftcard));
     }
 
     public function destroy(Giftcard $giftcard)
@@ -185,4 +207,23 @@ class GiftcardApiController extends Controller
         $giftcard->delete();
         return response()->noContent();
     }
+
+    private function serializeGiftcard(Giftcard $giftcard): array
+    {
+        $data = $giftcard->toArray();
+        $data['initial_amount'] = $this->minorToMajor($giftcard->initial_amount);
+        $data['balance'] = $this->minorToMajor($giftcard->balance);
+
+        return $data;
+    }
+
+    private function minorToMajor(?int $amount): float
+    {
+        if ($amount === null) {
+            return 0.0;
+        }
+
+        return round($amount / 100, 2);
+    }
+
 }
