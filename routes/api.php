@@ -21,5 +21,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // Giftcard REST API (protected by Sanctum)
 Route::middleware('auth:sanctum')->group(function () {
-    Route::apiResource('giftcards', GiftcardApiController::class);
+    Route::apiResource('giftcards', GiftcardApiController::class)->scoped(['giftcard' => 'code']);
 });
+
