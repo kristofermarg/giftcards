@@ -82,6 +82,17 @@ class PasskitService
         return ['raw' => $resp, 'pass_id' => $passId, 'url' => $passUrl];
     }
 
+    public function updateMemberPoints(string $memberId, float $points): void
+    {
+        $payload = [[
+            'op' => 'replace',
+            'path' => 'members.member.points',
+            'value' => max(0, round($points, 2)),
+        ]];
+
+        $this->request('PATCH', '/members/member/' . rawurlencode($memberId), $payload);
+    }
+
     private function request(string $method, string $path, ?array $body = null)
     {
         $url = $this->apiBase . '/' . ltrim($path, '/');

@@ -164,7 +164,7 @@ class GiftcardApiController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, Giftcard $giftcard)
+    public function update(Request $request, Giftcard $giftcard, PasskitService $passkit)
     {
         $data = $request->validate([
             'amount'    => ['required','numeric','min:0.01'],
@@ -213,6 +213,21 @@ class GiftcardApiController extends Controller
                 'currency'        => $giftcard->currency,
             ],
         ]);
+
+        if (!empty($giftcard->passkit_member_id)) {
+            try {
+                $passkit->updateMemberPoints(
+                    $giftcard->passkit_member_id,
+                    $this->minorToMajor($giftcard->balance),
+                );
+            } catch (\Throwable $e) {
+                \Log::error('PassKit balance sync failed', [
+                    'giftcard_id' => $giftcard->id,
+                    'passkit_member_id' => $giftcard->passkit_member_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $giftcard->refresh();
 
