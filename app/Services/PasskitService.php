@@ -86,7 +86,7 @@ class PasskitService
     {
         $payload = [[
             'op' => 'replace',
-            'path' => 'members.member.points',
+            'path' => '/members/member/points',
             'value' => max(0, round($points, 2)),
         ]];
 
@@ -99,10 +99,12 @@ class PasskitService
         $rid = (string) Str::uuid();
         $auth = $this->buildJwt();
 
+        $contentType = $method === 'PATCH' ? 'application/json-patch+json' : 'application/json';
+
         $headers = [
             'Authorization' => $auth,
             'Accept'        => 'application/json',
-            'Content-Type'  => 'application/json',
+            'Content-Type'  => $contentType,
             'X-Request-Id'  => $rid,
         ];
 
