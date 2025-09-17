@@ -25,6 +25,15 @@
                         —
                     @endif
                 </div>
+                <div>
+                    <span class="text-gray-500">PassKit URL:</span>
+                    @php($passUrl = data_get($giftcard->meta, 'pass_url'))
+                    @if($passUrl)
+                        <a href="{{ $passUrl }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline break-all">{{ $passUrl }}</a>
+                    @else
+                        &mdash;
+                    @endif
+                </div>
             </div>
         </div>
 
