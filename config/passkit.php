@@ -10,5 +10,8 @@ return [
     // Credentials for HS256 JWT
     'api_key'       => env('PASSKIT_API_KEY', ''),
     'api_secret'    => env('PASSKIT_API_SECRET', ''),
+
+    'default_email' => env('PASSKIT_DEFAULT_EMAIL', 'kristo@tactica.is'),
+
 ];
 

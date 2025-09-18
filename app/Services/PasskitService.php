@@ -16,6 +16,7 @@ class PasskitService
     private bool $debug;
     private string $apiKey;
     private string $apiSecret;
+    private string $defaultEmail;
 
     public function __construct()
     {
@@ -26,6 +27,7 @@ class PasskitService
         $this->debug      = (bool) config('passkit.debug', false);
         $this->apiKey     = (string) config('passkit.api_key', '');
         $this->apiSecret  = (string) config('passkit.api_secret', '');
+        $this->defaultEmail = trim((string) config('passkit.default_email', ''));
     }
 
     public function enrolMember(
@@ -38,6 +40,9 @@ class PasskitService
         $person = Arr::get($extra, 'person', []);
         if (!empty($email)) {
             $person['emailAddress'] = $email;
+        }
+        if (empty($person['emailAddress'] ?? null) && $this->defaultEmail !== '') {
+            $person['emailAddress'] = $this->defaultEmail;
         }
 
         $member = [
@@ -82,14 +87,21 @@ class PasskitService
         return ['raw' => $resp, 'pass_id' => $passId, 'url' => $passUrl];
     }
 
-    public function updateMemberPoints(?string $memberId, string $externalId, float $points): void
+    public function updateMemberPoints(?string $memberId, string $externalId, float $points, array $person = [], array $metaData = [], ?string $expiryDate = null): void
     {
+        if (empty($person['emailAddress'] ?? null) && $this->defaultEmail !== '') {
+            $person['emailAddress'] = $this->defaultEmail;
+        }
+
         $payload = $this->arrayCompact([
             'programId' => $this->programId !== '' ? $this->programId : null,
             'tierId'    => $this->tierId !== '' ? $this->tierId : null,
             'externalId' => (string) $externalId,
             'passId'    => ($memberId ?? '') !== '' ? $memberId : null,
             'points'    => max(0, round($points, 2)),
+            'person'    => !empty($person) ? $person : null,
+            'metaData'  => !empty($metaData) ? $metaData : null,
+            'expiryDate' => $expiryDate,
         ]);
 
         if ($this->debug) {
@@ -98,7 +110,7 @@ class PasskitService
             ]);
         }
 
-        $this->request('POST', '/members/member', $payload);
+        $this->request('PUT', '/members/member', $payload);
     }
 
     private function request(string $method, string $path, ?array $body = null)

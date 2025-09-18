@@ -216,11 +216,49 @@ class GiftcardApiController extends Controller
 
         $passkitMemberId = $giftcard->passkit_member_id;
         if (!empty($passkitMemberId)) {
+            $meta = Arr::wrap($giftcard->meta);
+            $person = [];
+            $ownerEmail = Arr::get($meta, 'owner_email');
+            $defaultEmail = config('passkit.default_email');
+            if (empty($ownerEmail) && !empty($defaultEmail)) {
+                $ownerEmail = $defaultEmail;
+            }
+            if (!empty($ownerEmail)) {
+                $person['emailAddress'] = $ownerEmail;
+            }
+
+            $ownerName = trim((string) Arr::get($meta, 'owner_name', ''));
+            if ($ownerName !== '') {
+                $person['displayName'] = $ownerName;
+                $parts = preg_split('/\\s+/', $ownerName, -1, PREG_SPLIT_NO_EMPTY);
+                if (!empty($parts)) {
+                    $person['forename'] = array_shift($parts);
+                    if (!empty($parts)) {
+                        $person['surname'] = implode(' ', $parts);
+                    }
+                }
+            }
+
+            $ownerPhone = Arr::get($meta, 'owner_phone');
+            if (!empty($ownerPhone)) {
+                $person['mobileNumber'] = $ownerPhone;
+            }
+
+            $metaData = array_filter([
+                'currency' => $giftcard->currency,
+                'site' => config('app.url'),
+            ], static fn ($value) => !is_null($value) && $value !== '');
+
+            $expiry = $giftcard->expires_at ? $giftcard->expires_at->toAtomString() : null;
+
             try {
                 $passkit->updateMemberPoints(
                     $passkitMemberId,
                     $giftcard->code,
                     $this->minorToMajor($giftcard->balance),
+                    $person,
+                    $metaData,
+                    $expiry,
                 );
             } catch (\Throwable $e) {
                 \Log::error('PassKit balance sync failed', [
