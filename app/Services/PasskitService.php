@@ -91,9 +91,9 @@ class PasskitService
         ]];
 
         $endpoints = array_values(array_unique(array_filter([
-            ($memberId ?? '') !== '' ? '/members/member/' . rawurlencode($memberId) : null,
-            '/members/member/' . rawurlencode($externalId) . '?idType=externalId',
-            '/members/member/externalId/' . rawurlencode($externalId),
+            ($memberId ?? '') !== '' ? $this->withProgramId('/members/member/' . rawurlencode($memberId)) : null,
+            $this->withProgramId('/members/member/' . rawurlencode($externalId) . '?idType=externalId'),
+            $this->withProgramId('/members/member/externalId/' . rawurlencode($externalId)),
         ], static fn ($value) => !is_null($value))));
 
         foreach ($endpoints as $index => $endpoint) {
@@ -128,6 +128,17 @@ class PasskitService
                 throw $e;
             }
         }
+    }
+
+    private function withProgramId(string $path): string
+    {
+        if ($this->programId === '') {
+            return $path;
+        }
+
+        $separator = str_contains($path, '?') ? '&' : '?';
+
+        return $path . $separator . 'programId=' . rawurlencode($this->programId);
     }
 
     private function request(string $method, string $path, ?array $body = null)
