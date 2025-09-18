@@ -19,10 +19,12 @@ class DashboardController extends Controller
         $search = trim((string) $request->query('search', ''));
         if ($search !== '') {
             $like = '%' . str_replace(['%', '_'], ['\%', '\_'], $search) . '%';
-            $query->where(function ($q) use ($like) {
-                $q->where('code', 'like', $like)
-                  ->orWhere('meta->owner_name', 'like', $like)
-                  ->orWhere('meta->owner_email', 'like', $like);
+            $operator = $query->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+
+            $query->where(function ($q) use ($like, $operator) {
+                $q->where('code', $operator, $like)
+                  ->orWhere('meta->owner_name', $operator, $like)
+                  ->orWhere('meta->owner_email', $operator, $like);
             });
         }
 
