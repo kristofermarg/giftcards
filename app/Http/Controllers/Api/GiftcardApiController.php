@@ -214,16 +214,19 @@ class GiftcardApiController extends Controller
             ],
         ]);
 
-        if (!empty($giftcard->passkit_member_id)) {
+        $passkitMemberId = $giftcard->passkit_member_id;
+        if (!empty($passkitMemberId)) {
             try {
                 $passkit->updateMemberPoints(
-                    $giftcard->passkit_member_id,
+                    $passkitMemberId,
+                    $giftcard->code,
                     $this->minorToMajor($giftcard->balance),
                 );
             } catch (\Throwable $e) {
                 \Log::error('PassKit balance sync failed', [
                     'giftcard_id' => $giftcard->id,
-                    'passkit_member_id' => $giftcard->passkit_member_id,
+                    'passkit_member_id' => $passkitMemberId,
+                    'passkit_external_id' => $giftcard->code,
                     'error' => $e->getMessage(),
                 ]);
             }
