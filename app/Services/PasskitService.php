@@ -84,61 +84,21 @@ class PasskitService
 
     public function updateMemberPoints(?string $memberId, string $externalId, float $points): void
     {
-        $payload = [[
-            'op' => 'replace',
-            'path' => '/members/member/points',
-            'value' => max(0, round($points, 2)),
-        ]];
+        $payload = $this->arrayCompact([
+            'programId' => $this->programId !== '' ? $this->programId : null,
+            'tierId'    => $this->tierId !== '' ? $this->tierId : null,
+            'externalId' => (string) $externalId,
+            'passId'    => ($memberId ?? '') !== '' ? $memberId : null,
+            'points'    => max(0, round($points, 2)),
+        ]);
 
-        $endpoints = array_values(array_unique(array_filter([
-            ($memberId ?? '') !== '' ? $this->withProgramId('/members/member/' . rawurlencode($memberId)) : null,
-            $this->withProgramId('/members/member/' . rawurlencode($externalId) . '?idType=externalId'),
-            $this->withProgramId('/members/member/externalId/' . rawurlencode($externalId)),
-        ], static fn ($value) => !is_null($value))));
-
-        foreach ($endpoints as $index => $endpoint) {
-            try {
-                if ($this->debug) {
-                    Log::debug('PassKit member points sync attempt', [
-                        'endpoint' => $endpoint,
-                        'points' => $payload[0]['value'],
-                        'memberId' => $memberId,
-                        'externalId' => $externalId,
-                    ]);
-                }
-
-                $this->request('PATCH', $endpoint, $payload);
-                return;
-            } catch (\RuntimeException $e) {
-                $is404 = str_contains($e->getMessage(), 'HTTP 404');
-                $isLast = $index === array_key_last($endpoints);
-
-                Log::warning('PassKit member points sync failed attempt', [
-                    'endpoint' => $endpoint,
-                    'memberId' => $memberId,
-                    'externalId' => $externalId,
-                    'is_last' => $isLast,
-                    'error' => $e->getMessage(),
-                ]);
-
-                if ($is404 && !$isLast) {
-                    continue;
-                }
-
-                throw $e;
-            }
-        }
-    }
-
-    private function withProgramId(string $path): string
-    {
-        if ($this->programId === '') {
-            return $path;
+        if ($this->debug) {
+            Log::debug('PassKit member points sync request', [
+                'payload' => $payload,
+            ]);
         }
 
-        $separator = str_contains($path, '?') ? '&' : '?';
-
-        return $path . $separator . 'programId=' . rawurlencode($this->programId);
+        $this->request('POST', '/members/member', $payload);
     }
 
     private function request(string $method, string $path, ?array $body = null)
