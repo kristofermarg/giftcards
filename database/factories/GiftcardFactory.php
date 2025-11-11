@@ -2,9 +2,8 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 use App\Services\GiftcardCode;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 class GiftcardFactory extends Factory
 {
@@ -14,15 +13,14 @@ class GiftcardFactory extends Factory
         $expiryMonths = random_int(3, 12);
 
         return [
-            'public_id'      => (string) Str::uuid(),
-            'code'           => GiftcardCode::make(),
-            'initial_amount' => $amount,
-            'balance'        => $amount,
-            'currency'       => 'ISK',
-            'status'         => 'active',
-            'expires_at'     => now()->addMonths($expiryMonths),
-            'meta'           => [
-                'owner_name'  => 'Giftcard Owner #' . random_int(1000, 9999),
+            'code' => GiftcardCode::make(),
+            'initial_amount_cents' => $amount,
+            'balance_cents' => $amount,
+            'currency' => 'ISK',
+            'status' => 'active',
+            'expires_at' => now()->addMonths($expiryMonths),
+            'meta' => [
+                'owner_name' => 'Giftcard Owner #' . random_int(1000, 9999),
                 'owner_email' => 'owner' . random_int(1000, 9999) . '@example.com',
             ],
         ];

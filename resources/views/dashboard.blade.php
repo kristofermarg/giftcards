@@ -54,13 +54,15 @@
                                     @php
                                         $status = $gc->status;
                                         $badge = match ($status) {
-                                            'active', 'redeemed' => 'bg-green-100 text-green-800',
-                                            'inactive', 'expired' => 'bg-red-100 text-red-800',
+                                            'active' => 'bg-green-100 text-green-800',
+                                            'blocked' => 'bg-yellow-100 text-yellow-800',
+                                            'expired' => 'bg-red-100 text-red-800',
                                             default => 'bg-gray-100 text-gray-700',
                                         };
                                         $dot = match ($status) {
-                                            'active', 'redeemed' => 'bg-green-500',
-                                            'inactive', 'expired' => 'bg-red-500',
+                                            'active' => 'bg-green-500',
+                                            'blocked' => 'bg-yellow-500',
+                                            'expired' => 'bg-red-500',
                                             default => 'bg-gray-400',
                                         };
                                         $ownerName = data_get($gc->meta, 'owner_name') ?? '-';

@@ -13,12 +13,15 @@
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
+                        {{ __('Stjórnborð') }}
                     </x-nav-link>
                     @auth
+                        <x-nav-link :href="route('giftcards.use')" :active="request()->routeIs('giftcards.use*')">
+                            {{ __('Nýta gjafakort') }}
+                        </x-nav-link>
                         @if (Auth::user()->email === 'kristo@tactica.is')
                             <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
-                                {{ __('Users') }}
+                                {{ __('Notendur') }}
                             </x-nav-link>
                         @endif
                     @endauth
@@ -78,6 +81,9 @@
                     {{ __('Dashboard') }}
                 </x-responsive-nav-link>
                 @auth
+                    <x-responsive-nav-link :href="route('giftcards.use')" :active="request()->routeIs('giftcards.use*')">
+                        {{ __('Use Giftcard') }}
+                    </x-responsive-nav-link>
                     @if (Auth::user()->email === 'kristo@tactica.is')
                         <x-responsive-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
                             {{ __('Users') }}

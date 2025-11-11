@@ -6,10 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Giftcard;
 use App\Services\GiftcardCode;
 use App\Services\PasskitService;
-use App\Models\GiftcardTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class GiftcardApiController extends Controller
@@ -40,7 +38,7 @@ class GiftcardApiController extends Controller
             'initial_amount' => ['required','numeric','min:0'],
             'balance'        => ['nullable','numeric','min:0'],
             'currency'       => ['nullable','string','size:3'],
-            'status'         => ['nullable', Rule::in(['active','inactive','redeemed','expired'])],
+            'status'         => ['nullable', Rule::in(['active','blocked','expired'])],
             'expires_at'     => ['nullable','date'],
             'meta'           => ['nullable','array'],
             'passkit_program_id' => ['nullable','string','max:64'],
@@ -58,10 +56,9 @@ class GiftcardApiController extends Controller
             : $initialMinor;
 
         $giftcard = new Giftcard();
-        $giftcard->public_id = (string) Str::uuid();
         $giftcard->code = GiftcardCode::make();
-        $giftcard->initial_amount = $initialMinor;
-        $giftcard->balance = max(0, $balanceMinor);
+        $giftcard->initial_amount_cents = 0;
+        $giftcard->balance_cents = 0;
         $giftcard->currency = strtoupper($data['currency'] ?? 'ISK');
         $giftcard->status = $data['status'] ?? 'active';
         $giftcard->expires_at = $data['expires_at'] ?? null;
@@ -70,21 +67,44 @@ class GiftcardApiController extends Controller
         $giftcard->passkit_member_id = $data['passkit_member_id'] ?? null;
         $giftcard->save();
 
-        // Record initial credit transaction (optionally linked to Woo order)
-        try {
-            $reference = $data['order_reference'] ?? (isset($data['order_id']) ? ('wc:' . (string) $data['order_id']) : null);
-            GiftcardTransaction::create([
-                'giftcard_id' => $giftcard->id,
-                'type'        => 'credit',
-                'amount'      => (int) $giftcard->initial_amount,
-                'reference'   => $reference,
-                'details'     => $data['order_meta'] ?? (isset($data['order_id']) ? ['order_id' => $data['order_id']] : null),
-            ]);
-        } catch (\Throwable $e) {
-            \Log::error('Failed to create initial giftcard transaction', [
-                'giftcard_id' => $giftcard->id,
-                'error' => $e->getMessage(),
-            ]);
+        $reference = $data['order_reference'] ?? (isset($data['order_id']) ? ('wc:' . (string) $data['order_id']) : null);
+        $orderDetails = array_filter([
+            'order_id' => $data['order_id'] ?? null,
+            'order_reference' => $data['order_reference'] ?? null,
+            'order_meta' => $data['order_meta'] ?? null,
+        ], static fn ($value) => !is_null($value));
+
+        $woocommerceOrderId = isset($data['order_id']) ? (int) $data['order_id'] : null;
+
+        if ($initialMinor > 0) {
+            try {
+                $giftcard->issue($initialMinor, $reference, array_merge([
+                    'reason' => 'initial_credit',
+                ], $orderDetails), $woocommerceOrderId);
+            } catch (\Throwable $e) {
+                \Log::error('Failed to create initial giftcard transaction', [
+                    'giftcard_id' => $giftcard->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $delta = $balanceMinor - (int) $giftcard->balance;
+        if ($delta !== 0) {
+            try {
+                $adjustmentDetails = [
+                    'reason' => 'initial_balance_adjustment',
+                    'requested_balance_minor' => $balanceMinor,
+                    'requested_balance_major' => $this->minorToMajor($balanceMinor),
+                ];
+
+                $giftcard->adjust($delta, 'initial_balance_adjustment', $adjustmentDetails);
+            } catch (\Throwable $e) {
+                \Log::error('Failed to reconcile giftcard balance', [
+                    'giftcard_id' => $giftcard->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         // Attempt PassKit enrolment (best-effort)
@@ -193,26 +213,24 @@ class GiftcardApiController extends Controller
             ], 422);
         }
 
-        $giftcard->balance = $previousBalance - $amountMinor;
-        if ($giftcard->balance === 0) {
-            $giftcard->status = 'inactive';
+        try {
+            $giftcard->redeem(
+                $amountMinor,
+                $data['reference'] ?? null,
+                [
+                    'reason' => 'api_debit',
+                    'amount_major' => $amount,
+                    'requested_by' => $request->user()?->id,
+                ]
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => [
+                    'amount' => [$e->getMessage()],
+                ],
+            ], 422);
         }
-        $giftcard->save();
-
-        GiftcardTransaction::create([
-            'giftcard_id' => $giftcard->id,
-            'type'        => 'debit',
-            'amount'      => $amountMinor,
-            'reference'   => $data['reference'] ?? null,
-            'details'     => [
-                'reason'          => 'api_debit',
-                'amount_major'    => $amount,
-                'amount_minor'    => $amountMinor,
-                'balance_before'  => $previousBalance,
-                'balance_after'   => $giftcard->balance,
-                'currency'        => $giftcard->currency,
-            ],
-        ]);
 
         $passkitMemberId = $giftcard->passkit_member_id;
         if (!empty($passkitMemberId)) {
@@ -284,8 +302,8 @@ class GiftcardApiController extends Controller
     private function serializeGiftcard(Giftcard $giftcard): array
     {
         $data = $giftcard->toArray();
-        $data['initial_amount'] = $this->minorToMajor($giftcard->initial_amount);
-        $data['balance'] = $this->minorToMajor($giftcard->balance);
+        $data['initial_amount'] = $this->minorToMajor($giftcard->initial_amount_cents);
+        $data['balance'] = $this->minorToMajor($giftcard->balance_cents);
 
         return $data;
     }
