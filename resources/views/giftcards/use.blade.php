@@ -40,7 +40,7 @@
                             autocomplete="off"
                             value="{{ old('code', $result['code'] ?? '') }}"
                             class="flex-1 rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 px-4 py-3 font-mono uppercase tracking-wider"
-                            placeholder="Skannaðu eða sláðu inn kóðann"
+                            placeholder="Sláðu inn kóða"
                             required
                         >
                         <button
@@ -76,9 +76,6 @@
                             <p class="text-sm text-white/80">Bíður eftir myndavél...</p>
                         </div>
                     </div>
-                    <p class="mt-2 text-xs text-indigo-800">
-                        Einugni stuðningur er við skönnun með vefmyndavélum á tækjum með HTTPS-tengingu
-                    </p>
                 </div>
 
                 <div class="grid gap-6 sm:grid-cols-2">
@@ -94,11 +91,11 @@
                             min="0.01"
                             value="{{ old('amount') }}"
                             class="w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 px-4 py-3"
-                            placeholder="0.00"
+                            placeholder="0"
                             required
                         >
                         <p class="mt-2 text-sm text-gray-500">
-                            Upphæðin er tekin af gjafakortinu í gjaldmiðli þess (sýnt eftir að upphæð hefur verið dregin af).
+                            Upphæðin er tekin af gjafakortinu.
                         </p>
                     </div>
                     <div>
@@ -111,7 +108,7 @@
                             type="text"
                             value="{{ old('reference') }}"
                             class="w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 px-4 py-3"
-                            placeholder="e.g. Order #123"
+                            placeholder="t.d Pöntun #123"
                         >
                         <p class="mt-2 text-sm text-gray-500">
                             Hentugt til að tengja nýtinguna aftur við pöntun eða kassakvittun.
