@@ -188,11 +188,10 @@
             let detectionFrame = null;
             let detectionActive = false;
 
-            let quaggaLoader = null;
-            let quaggaHandler = null;
-            let quaggaActive = false;
+            let html5Loader = null;
+            let html5Instance = null;
 
-            let activeMode = null; // 'native' | 'quagga' | null
+            let activeMode = null; // 'native' | 'html5' | null
 
             const ensureVideoElement = () => {
                 if (videoEl || !scannerView) {
@@ -233,22 +232,23 @@
                 }
             };
 
-            const stopQuaggaScanner = () => {
-                if (window.Quagga && quaggaActive) {
-                    if (quaggaHandler) {
-                        window.Quagga.offDetected(quaggaHandler);
-                        quaggaHandler = null;
-                    }
-                    window.Quagga.stop();
+            const stopHtml5Scanner = () => {
+                if (!html5Instance) {
+                    return;
                 }
-                quaggaActive = false;
+                html5Instance.stop()
+                    .catch(() => {})
+                    .finally(() => {
+                        html5Instance.clear();
+                        html5Instance = null;
+                    });
             };
 
             const stopScanner = () => {
                 if (activeMode === 'native') {
                     stopNativeScanner();
-                } else if (activeMode === 'quagga') {
-                    stopQuaggaScanner();
+                } else if (activeMode === 'html5') {
+                    stopHtml5Scanner();
                 }
                 resetUi();
             };
@@ -331,79 +331,77 @@
                 });
             };
 
-            const loadQuagga = () => {
-                if (window.Quagga) {
-                    return Promise.resolve(window.Quagga);
+            const loadHtml5Scanner = () => {
+                if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
+                    return Promise.resolve(window);
                 }
-                if (quaggaLoader) {
-                    return quaggaLoader;
+                if (html5Loader) {
+                    return html5Loader;
                 }
-                quaggaLoader = new Promise((resolve, reject) => {
+                html5Loader = new Promise((resolve, reject) => {
                     const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+                    script.src = 'https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js';
                     script.async = true;
-                    script.crossOrigin = 'anonymous';
                     script.onload = () => {
-                        if (window.Quagga) {
-                            resolve(window.Quagga);
+                        if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
+                            resolve(window);
                         } else {
-                            reject(new Error('Quagga failed to load.'));
+                            reject(new Error('Html5Qrcode failed to load.'));
                         }
                     };
-                    script.onerror = () => reject(new Error('Quagga script failed to load.'));
+                    script.onerror = () => reject(new Error('Html5Qrcode script failed to load.'));
                     document.head.appendChild(script);
                 });
-                return quaggaLoader;
+                return html5Loader;
             };
 
-            const startQuaggaScanner = () => {
-                loadQuagga()
-                    .then(Quagga => {
-                        Quagga.init({
-                            inputStream: {
-                                type: 'LiveStream',
-                                target: scannerView,
-                                constraints: {
-                                    facingMode: 'environment',
-                                },
-                            },
-                            decoder: {
-                                readers: [
-                                    'code_128_reader',
-                                    'ean_reader',
-                                    'ean_8_reader',
-                                    'code_39_reader',
-                                    'code_39_vin_reader',
-                                    'upc_reader',
-                                    'upc_e_reader',
-                                ],
-                            },
-                            locate: true,
-                        }, err => {
-                            if (err) {
-                                console.error('Quagga init failed', err);
-                                alert('Unable to start the scanner. Please type the code manually.');
-                                resetUi();
-                                return;
-                            }
+            const startHtml5Scanner = () => {
+                if (!scannerView?.id) {
+                    alert('Unable to start the scanner. Please type the code manually.');
+                    resetUi();
+                    return;
+                }
 
+                loadHtml5Scanner()
+                    .then(() => {
+                        try {
+                            const formats = window.Html5QrcodeSupportedFormats;
+                            html5Instance = new window.Html5Qrcode(scannerView.id, {
+                                formatsToSupport: [
+                                    formats.CODE_128,
+                                    formats.CODE_39,
+                                    formats.CODE_93,
+                                    formats.EAN_8,
+                                    formats.EAN_13,
+                                    formats.UPC_A,
+                                    formats.UPC_E,
+                                ],
+                            });
+                        } catch (error) {
+                            console.error('Failed to initialise Html5Qrcode', error);
+                            alert('Unable to start the scanner. Please type the code manually.');
+                            resetUi();
+                            return;
+                        }
+
+                        html5Instance.start(
+                            { facingMode: 'environment' },
+                            { fps: 10, disableFlip: true },
+                            decodedText => handleDetectionResult(decodedText),
+                            () => {}
+                        ).then(() => {
                             overlay?.classList.add('hidden');
-                            activeMode = 'quagga';
-                            quaggaActive = true;
+                            activeMode = 'html5';
                             if (toggleButton) {
                                 toggleButton.textContent = 'Stop scanning';
                                 toggleButton.removeAttribute('disabled');
                             }
-
-                            quaggaHandler = data => {
-                                if (!data?.codeResult?.code) {
-                                    return;
-                                }
-                                handleDetectionResult(data.codeResult.code);
-                            };
-
-                            Quagga.onDetected(quaggaHandler);
-                            Quagga.start();
+                        }).catch(error => {
+                            console.error('Html5Qrcode start failed', error);
+                            alert('Unable to start the scanner. Please type the code manually.');
+                            resetUi();
+                            html5Instance?.clear();
+                            html5Instance = null;
                         });
                     })
                     .catch(error => {
@@ -424,7 +422,7 @@
                 if (nativeSupported && barcodeDetector) {
                     startNativeScanner();
                 } else {
-                    startQuaggaScanner();
+                    startHtml5Scanner();
                 }
             };
 
