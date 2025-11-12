@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'kristo@tactica.is'],
             [
                 'name' => 'Admin',
-                'password' => Hash::make('czw8WGE*myn1wpb-aru'),
+                'password' => Hash::make('broskall1'),
             ]
         );
 

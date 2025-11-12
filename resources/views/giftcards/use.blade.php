@@ -70,9 +70,10 @@
                             Hætta við skönnun
                         </button>
                     </div>
-                    <div id="scanner-view" class="aspect-video rounded-lg bg-black overflow-hidden relative">
-                        <div id="scanner-overlay" class="absolute inset-0 flex items-center justify-center">
-                            <p class="text-sm text-white/70">Bíður eftir myndavél...</p>
+                    <div class="aspect-video rounded-lg overflow-hidden relative bg-black">
+                        <div id="scanner-feed" class="w-full h-full"></div>
+                        <div id="scanner-overlay" class="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
+                            <p class="text-sm text-white/80">Bíður eftir myndavél...</p>
                         </div>
                     </div>
                     <p class="mt-2 text-xs text-indigo-800">
@@ -162,7 +163,7 @@
             const toggleButton = document.getElementById('toggle-scanner');
             const closeButton = document.getElementById('close-scanner');
             const panel = document.getElementById('scanner-panel');
-            const scannerView = document.getElementById('scanner-view');
+            const scannerFeed = document.getElementById('scanner-feed');
             const overlay = document.getElementById('scanner-overlay');
             const codeInput = document.getElementById('giftcard-code');
             const defaultButtonLabel = toggleButton?.textContent ?? 'Scan code';
@@ -193,7 +194,7 @@
             let activeMode = null; // 'native' | 'html5' | null
 
             const ensureVideoElement = () => {
-                if (videoEl || !scannerView) {
+                if (videoEl || !scannerFeed) {
                     return videoEl;
                 }
                 videoEl = document.createElement('video');
@@ -201,7 +202,8 @@
                 videoEl.setAttribute('autoplay', '');
                 videoEl.muted = true;
                 videoEl.className = 'w-full h-full object-cover';
-                scannerView.insertBefore(videoEl, overlay ?? null);
+                scannerFeed.innerHTML = '';
+                scannerFeed.appendChild(videoEl);
                 return videoEl;
             };
 
@@ -331,7 +333,7 @@
             };
 
             const startHtml5Scanner = () => {
-                if (!scannerView?.id) {
+                if (!scannerFeed?.id) {
                     alert('Unable to start the scanner. Please type the code manually.');
                     resetUi();
                     return;
@@ -346,7 +348,7 @@
 
                 try {
                     const formats = window.Html5QrcodeSupportedFormats;
-                    html5Instance = new window.Html5Qrcode(scannerView.id, {
+                    html5Instance = new window.Html5Qrcode(scannerFeed.id, {
                         formatsToSupport: [
                             formats.CODE_128,
                             formats.CODE_39,
