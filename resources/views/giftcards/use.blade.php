@@ -165,8 +165,9 @@
             const overlay = document.getElementById('scanner-overlay');
             const codeInput = document.getElementById('giftcard-code');
             const defaultButtonLabel = toggleButton?.textContent ?? 'Scan code';
-            const supportsBarcodeDetector = 'BarcodeDetector' in window;
-            const barcodeDetector = supportsBarcodeDetector
+
+            const nativeSupported = 'BarcodeDetector' in window;
+            const barcodeDetector = nativeSupported
                 ? new BarcodeDetector({
                     formats: [
                         'code_128',
@@ -180,12 +181,18 @@
                 })
                 : null;
 
-            let mediaStream = null;
-            let detectionActive = false;
-            let detectionFrame = null;
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             let videoEl = null;
+            let mediaStream = null;
+            let detectionFrame = null;
+            let detectionActive = false;
+
+            let quaggaLoader = null;
+            let quaggaHandler = null;
+            let quaggaActive = false;
+
+            let activeMode = null; // 'native' | 'quagga' | null
 
             const ensureVideoElement = () => {
                 if (videoEl || !scannerView) {
@@ -200,7 +207,17 @@
                 return videoEl;
             };
 
-            const stopScanner = () => {
+            const resetUi = () => {
+                overlay?.classList.remove('hidden');
+                panel?.classList.add('hidden');
+                if (toggleButton) {
+                    toggleButton.removeAttribute('disabled');
+                    toggleButton.textContent = defaultButtonLabel;
+                }
+                activeMode = null;
+            };
+
+            const stopNativeScanner = () => {
                 detectionActive = false;
                 if (detectionFrame) {
                     cancelAnimationFrame(detectionFrame);
@@ -214,20 +231,33 @@
                     videoEl.pause();
                     videoEl.srcObject = null;
                 }
-
-                overlay?.classList.remove('hidden');
-                panel?.classList.add('hidden');
-                if (toggleButton) {
-                    toggleButton.removeAttribute('disabled');
-                    toggleButton.textContent = defaultButtonLabel;
-                }
             };
 
-            const handleDetectionResult = rawValue => {
-                if (!rawValue) {
+            const stopQuaggaScanner = () => {
+                if (window.Quagga && quaggaActive) {
+                    if (quaggaHandler) {
+                        window.Quagga.offDetected(quaggaHandler);
+                        quaggaHandler = null;
+                    }
+                    window.Quagga.stop();
+                }
+                quaggaActive = false;
+            };
+
+            const stopScanner = () => {
+                if (activeMode === 'native') {
+                    stopNativeScanner();
+                } else if (activeMode === 'quagga') {
+                    stopQuaggaScanner();
+                }
+                resetUi();
+            };
+
+            const handleDetectionResult = value => {
+                if (!value) {
                     return;
                 }
-                codeInput.value = String(rawValue).trim();
+                codeInput.value = String(value).trim();
                 codeInput.focus();
                 stopScanner();
             };
@@ -252,8 +282,7 @@
                 try {
                     const codes = await barcodeDetector.detect(canvas);
                     if (Array.isArray(codes) && codes.length > 0) {
-                        const value = codes[0]?.rawValue ?? '';
-                        handleDetectionResult(value);
+                        handleDetectionResult(codes[0]?.rawValue ?? '');
                         return;
                     }
                 } catch (error) {
@@ -265,24 +294,12 @@
                 }
             };
 
-            const startScanner = () => {
-                if (!supportsBarcodeDetector || !barcodeDetector) {
-                    alert('This browser does not support camera scanning yet. Please enter the code manually.');
-                    return;
-                }
-
+            const startNativeScanner = () => {
                 const video = ensureVideoElement();
                 if (!video) {
                     alert('Unable to initialise the video area.');
+                    resetUi();
                     return;
-                }
-
-                panel?.classList.remove('hidden');
-                overlay?.classList.remove('hidden');
-
-                if (toggleButton) {
-                    toggleButton.textContent = 'Starting camera...';
-                    toggleButton.setAttribute('disabled', 'disabled');
                 }
 
                 const getStream = navigator.mediaDevices?.getUserMedia?.({
@@ -291,7 +308,7 @@
 
                 if (!getStream) {
                     alert('Unable to access the camera. Allow permissions or type the code manually.');
-                    stopScanner();
+                    resetUi();
                     return;
                 }
 
@@ -301,6 +318,7 @@
                     video.play().catch(() => {});
                     overlay?.classList.add('hidden');
                     detectionActive = true;
+                    activeMode = 'native';
                     runDetectorLoop();
                     if (toggleButton) {
                         toggleButton.textContent = 'Stop scanning';
@@ -309,8 +327,105 @@
                 }).catch(error => {
                     console.error('Unable to access the camera', error);
                     alert('Unable to access the camera. Allow permissions or type the code manually.');
-                    stopScanner();
+                    resetUi();
                 });
+            };
+
+            const loadQuagga = () => {
+                if (window.Quagga) {
+                    return Promise.resolve(window.Quagga);
+                }
+                if (quaggaLoader) {
+                    return quaggaLoader;
+                }
+                quaggaLoader = new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+                    script.async = true;
+                    script.crossOrigin = 'anonymous';
+                    script.onload = () => {
+                        if (window.Quagga) {
+                            resolve(window.Quagga);
+                        } else {
+                            reject(new Error('Quagga failed to load.'));
+                        }
+                    };
+                    script.onerror = () => reject(new Error('Quagga script failed to load.'));
+                    document.head.appendChild(script);
+                });
+                return quaggaLoader;
+            };
+
+            const startQuaggaScanner = () => {
+                loadQuagga()
+                    .then(Quagga => {
+                        Quagga.init({
+                            inputStream: {
+                                type: 'LiveStream',
+                                target: scannerView,
+                                constraints: {
+                                    facingMode: 'environment',
+                                },
+                            },
+                            decoder: {
+                                readers: [
+                                    'code_128_reader',
+                                    'ean_reader',
+                                    'ean_8_reader',
+                                    'code_39_reader',
+                                    'code_39_vin_reader',
+                                    'upc_reader',
+                                    'upc_e_reader',
+                                ],
+                            },
+                            locate: true,
+                        }, err => {
+                            if (err) {
+                                console.error('Quagga init failed', err);
+                                alert('Unable to start the scanner. Please type the code manually.');
+                                resetUi();
+                                return;
+                            }
+
+                            overlay?.classList.add('hidden');
+                            activeMode = 'quagga';
+                            quaggaActive = true;
+                            if (toggleButton) {
+                                toggleButton.textContent = 'Stop scanning';
+                                toggleButton.removeAttribute('disabled');
+                            }
+
+                            quaggaHandler = data => {
+                                if (!data?.codeResult?.code) {
+                                    return;
+                                }
+                                handleDetectionResult(data.codeResult.code);
+                            };
+
+                            Quagga.onDetected(quaggaHandler);
+                            Quagga.start();
+                        });
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        alert('Unable to load the scanning library. Please enter the code manually.');
+                        resetUi();
+                    });
+            };
+
+            const startScanner = () => {
+                panel?.classList.remove('hidden');
+                overlay?.classList.remove('hidden');
+                if (toggleButton) {
+                    toggleButton.textContent = 'Starting camera...';
+                    toggleButton.setAttribute('disabled', 'disabled');
+                }
+
+                if (nativeSupported && barcodeDetector) {
+                    startNativeScanner();
+                } else {
+                    startQuaggaScanner();
+                }
             };
 
             toggleButton?.addEventListener('click', event => {
