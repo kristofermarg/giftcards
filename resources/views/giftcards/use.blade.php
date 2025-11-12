@@ -190,6 +190,7 @@
 
             let html5Loader = null;
             let html5Instance = null;
+            const html5ScriptUrl = @json(asset('vendor/html5-qrcode.min.js'));
 
             let activeMode = null; // 'native' | 'html5' | null
 
@@ -340,8 +341,9 @@
                 }
                 html5Loader = new Promise((resolve, reject) => {
                     const script = document.createElement('script');
-                    script.src = 'https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js';
+                    script.src = html5ScriptUrl;
                     script.async = true;
+                    script.crossOrigin = 'anonymous';
                     script.onload = () => {
                         if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
                             resolve(window);
