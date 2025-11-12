@@ -355,6 +355,7 @@
                             formats.EAN_13,
                             formats.UPC_A,
                             formats.UPC_E,
+                            formats.PDF_417,
                         ],
                     });
                 } catch (error) {
