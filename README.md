@@ -21,6 +21,22 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Generating a WooCommerce API token
+
+Endpoints under `https://gjafakort.webdev.is/api` are protected by Laravel Sanctum. Generate a personal access token for WooCommerce integrations like this:
+
+1. SSH into the production server that runs this project and `cd` into the repo.
+2. Run `php artisan tinker`.
+3. Inside Tinker, create a token for the WooCommerce user (replace the email if needed):
+   ```php
+   $user = App\Models\User::firstWhere('email', 'kristo@tactica.is');
+   $token = $user->createToken('woocommerce');
+   $token->plainTextToken;
+   ```
+4. Copy the `plainTextToken` output immediately and store it securely (it is shown once). Use it as a Bearer token in the `Authorization` header for API calls made from WooCommerce.
+
+If the token is ever lost, delete the old token from `personal_access_tokens` and repeat the steps above.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
