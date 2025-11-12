@@ -71,7 +71,7 @@
                         </button>
                     </div>
                     <div id="scanner-view" class="aspect-video rounded-lg bg-black overflow-hidden relative">
-                        <div class="absolute inset-0 flex items-center justify-center">
+                        <div id="scanner-overlay" class="absolute inset-0 flex items-center justify-center">
                             <p class="text-sm text-white/70">Bíður eftir myndavél...</p>
                         </div>
                     </div>
@@ -156,29 +156,66 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js" integrity="sha512-c1uknS9s/6D7B6rFeoJEBhDigw1kLT69aGSDxvndlwaKICeJvo2aUYTbwdSCZH/5LiCFYI8a9kaI0s5momkGLg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const toggleButton = document.getElementById('toggle-scanner');
             const closeButton = document.getElementById('close-scanner');
             const panel = document.getElementById('scanner-panel');
             const scannerView = document.getElementById('scanner-view');
+            const overlay = document.getElementById('scanner-overlay');
             const codeInput = document.getElementById('giftcard-code');
             const defaultButtonLabel = toggleButton?.textContent ?? 'Scan code';
+            const supportsBarcodeDetector = 'BarcodeDetector' in window;
+            const barcodeDetector = supportsBarcodeDetector
+                ? new BarcodeDetector({
+                    formats: [
+                        'code_128',
+                        'code_39',
+                        'code_39_vin',
+                        'ean_8',
+                        'ean_13',
+                        'upc_a',
+                        'upc_e',
+                    ],
+                })
+                : null;
 
-            let quaggaReady = false;
-            let detectionHandler = null;
+            let mediaStream = null;
+            let detectionActive = false;
+            let detectionFrame = null;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            let videoEl = null;
+
+            const ensureVideoElement = () => {
+                if (videoEl || !scannerView) {
+                    return videoEl;
+                }
+                videoEl = document.createElement('video');
+                videoEl.setAttribute('playsinline', '');
+                videoEl.setAttribute('autoplay', '');
+                videoEl.muted = true;
+                videoEl.className = 'w-full h-full object-cover';
+                scannerView.insertBefore(videoEl, overlay ?? null);
+                return videoEl;
+            };
 
             const stopScanner = () => {
-                if (window.Quagga && quaggaReady) {
-                    if (detectionHandler) {
-                        Quagga.offDetected(detectionHandler);
-                    }
-                    Quagga.stop();
+                detectionActive = false;
+                if (detectionFrame) {
+                    cancelAnimationFrame(detectionFrame);
+                    detectionFrame = null;
                 }
-                quaggaReady = false;
-                detectionHandler = null;
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                if (videoEl) {
+                    videoEl.pause();
+                    videoEl.srcObject = null;
+                }
 
+                overlay?.classList.remove('hidden');
                 panel?.classList.add('hidden');
                 if (toggleButton) {
                     toggleButton.removeAttribute('disabled');
@@ -186,64 +223,93 @@
                 }
             };
 
-            const handleDetection = result => {
-                if (!result?.codeResult?.code) {
+            const handleDetectionResult = rawValue => {
+                if (!rawValue) {
                     return;
                 }
-                codeInput.value = result.codeResult.code.trim();
+                codeInput.value = String(rawValue).trim();
                 codeInput.focus();
                 stopScanner();
             };
 
+            const runDetectorLoop = async () => {
+                if (!detectionActive || !barcodeDetector || !videoEl) {
+                    return;
+                }
+
+                if (videoEl.readyState < 2) {
+                    detectionFrame = requestAnimationFrame(runDetectorLoop);
+                    return;
+                }
+
+                if (canvas.width !== videoEl.videoWidth || canvas.height !== videoEl.videoHeight) {
+                    canvas.width = videoEl.videoWidth;
+                    canvas.height = videoEl.videoHeight;
+                }
+
+                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+                try {
+                    const codes = await barcodeDetector.detect(canvas);
+                    if (Array.isArray(codes) && codes.length > 0) {
+                        const value = codes[0]?.rawValue ?? '';
+                        handleDetectionResult(value);
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Barcode detection failed', error);
+                }
+
+                if (detectionActive) {
+                    detectionFrame = requestAnimationFrame(runDetectorLoop);
+                }
+            };
+
             const startScanner = () => {
-                if (!window.Quagga) {
-                    alert('Scanning library failed to load. Please type the code instead.');
+                if (!supportsBarcodeDetector || !barcodeDetector) {
+                    alert('This browser does not support camera scanning yet. Please enter the code manually.');
+                    return;
+                }
+
+                const video = ensureVideoElement();
+                if (!video) {
+                    alert('Unable to initialise the video area.');
                     return;
                 }
 
                 panel?.classList.remove('hidden');
+                overlay?.classList.remove('hidden');
+
                 if (toggleButton) {
                     toggleButton.textContent = 'Starting camera...';
                     toggleButton.setAttribute('disabled', 'disabled');
                 }
 
-                detectionHandler = handleDetection;
+                const getStream = navigator.mediaDevices?.getUserMedia?.({
+                    video: { facingMode: 'environment' },
+                });
 
-                Quagga.init({
-                    inputStream: {
-                        type: 'LiveStream',
-                        target: scannerView,
-                        constraints: {
-                            facingMode: 'environment',
-                        },
-                    },
-                    decoder: {
-                        readers: [
-                            'code_128_reader',
-                            'ean_reader',
-                            'ean_8_reader',
-                            'code_39_reader',
-                            'code_39_vin_reader',
-                            'upc_reader',
-                            'upc_e_reader',
-                        ],
-                    },
-                    locate: true,
-                }, err => {
-                    if (err) {
-                        console.error(err);
-                        alert('Unable to access the camera. Please allow permissions or enter the code manually.');
-                        stopScanner();
-                        return;
-                    }
+                if (!getStream) {
+                    alert('Unable to access the camera. Allow permissions or type the code manually.');
+                    stopScanner();
+                    return;
+                }
 
-                    Quagga.start();
-                    Quagga.onDetected(detectionHandler);
-                    quaggaReady = true;
+                getStream.then(stream => {
+                    mediaStream = stream;
+                    video.srcObject = stream;
+                    video.play().catch(() => {});
+                    overlay?.classList.add('hidden');
+                    detectionActive = true;
+                    runDetectorLoop();
                     if (toggleButton) {
                         toggleButton.textContent = 'Stop scanning';
                         toggleButton.removeAttribute('disabled');
                     }
+                }).catch(error => {
+                    console.error('Unable to access the camera', error);
+                    alert('Unable to access the camera. Allow permissions or type the code manually.');
+                    stopScanner();
                 });
             };
 
