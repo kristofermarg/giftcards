@@ -156,6 +156,7 @@
         </div>
     </div>
 
+    <script src="{{ asset('vendor/html5-qrcode.min.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const toggleButton = document.getElementById('toggle-scanner');
@@ -188,10 +189,7 @@
             let detectionFrame = null;
             let detectionActive = false;
 
-            let html5Loader = null;
             let html5Instance = null;
-            const html5ScriptUrl = @json(asset('vendor/html5-qrcode.min.js'));
-
             let activeMode = null; // 'native' | 'html5' | null
 
             const ensureVideoElement = () => {
@@ -332,31 +330,6 @@
                 });
             };
 
-            const loadHtml5Scanner = () => {
-                if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
-                    return Promise.resolve(window);
-                }
-                if (html5Loader) {
-                    return html5Loader;
-                }
-                html5Loader = new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = html5ScriptUrl;
-                    script.async = true;
-                    script.crossOrigin = 'anonymous';
-                    script.onload = () => {
-                        if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
-                            resolve(window);
-                        } else {
-                            reject(new Error('Html5Qrcode failed to load.'));
-                        }
-                    };
-                    script.onerror = () => reject(new Error('Html5Qrcode script failed to load.'));
-                    document.head.appendChild(script);
-                });
-                return html5Loader;
-            };
-
             const startHtml5Scanner = () => {
                 if (!scannerView?.id) {
                     alert('Unable to start the scanner. Please type the code manually.');
@@ -364,53 +337,52 @@
                     return;
                 }
 
-                loadHtml5Scanner()
-                    .then(() => {
-                        try {
-                            const formats = window.Html5QrcodeSupportedFormats;
-                            html5Instance = new window.Html5Qrcode(scannerView.id, {
-                                formatsToSupport: [
-                                    formats.CODE_128,
-                                    formats.CODE_39,
-                                    formats.CODE_93,
-                                    formats.EAN_8,
-                                    formats.EAN_13,
-                                    formats.UPC_A,
-                                    formats.UPC_E,
-                                ],
-                            });
-                        } catch (error) {
-                            console.error('Failed to initialise Html5Qrcode', error);
-                            alert('Unable to start the scanner. Please type the code manually.');
-                            resetUi();
-                            return;
-                        }
+                if (!(window.Html5Qrcode && window.Html5QrcodeSupportedFormats)) {
+                    console.error('Html5Qrcode library is not available on the page.');
+                    alert('Unable to load the scanning library. Please enter the code manually.');
+                    resetUi();
+                    return;
+                }
 
-                        html5Instance.start(
-                            { facingMode: 'environment' },
-                            { fps: 10, disableFlip: true },
-                            decodedText => handleDetectionResult(decodedText),
-                            () => {}
-                        ).then(() => {
-                            overlay?.classList.add('hidden');
-                            activeMode = 'html5';
-                            if (toggleButton) {
-                                toggleButton.textContent = 'Stop scanning';
-                                toggleButton.removeAttribute('disabled');
-                            }
-                        }).catch(error => {
-                            console.error('Html5Qrcode start failed', error);
-                            alert('Unable to start the scanner. Please type the code manually.');
-                            resetUi();
-                            html5Instance?.clear();
-                            html5Instance = null;
-                        });
-                    })
-                    .catch(error => {
-                        console.error(error);
-                        alert('Unable to load the scanning library. Please enter the code manually.');
-                        resetUi();
+                try {
+                    const formats = window.Html5QrcodeSupportedFormats;
+                    html5Instance = new window.Html5Qrcode(scannerView.id, {
+                        formatsToSupport: [
+                            formats.CODE_128,
+                            formats.CODE_39,
+                            formats.CODE_93,
+                            formats.EAN_8,
+                            formats.EAN_13,
+                            formats.UPC_A,
+                            formats.UPC_E,
+                        ],
                     });
+                } catch (error) {
+                    console.error('Failed to initialise Html5Qrcode', error);
+                    alert('Unable to start the scanner. Please type the code manually.');
+                    resetUi();
+                    return;
+                }
+
+                html5Instance.start(
+                    { facingMode: 'environment' },
+                    { fps: 10, disableFlip: true },
+                    decodedText => handleDetectionResult(decodedText),
+                    () => {}
+                ).then(() => {
+                    overlay?.classList.add('hidden');
+                    activeMode = 'html5';
+                    if (toggleButton) {
+                        toggleButton.textContent = 'Stop scanning';
+                        toggleButton.removeAttribute('disabled');
+                    }
+                }).catch(error => {
+                    console.error('Html5Qrcode start failed', error);
+                    alert('Unable to start the scanner. Please type the code manually.');
+                    resetUi();
+                    html5Instance?.clear();
+                    html5Instance = null;
+                });
             };
 
             const startScanner = () => {
